@@ -117,47 +117,166 @@ Onze oplossing gebruikt **Machine Learning** om:
 
 ## 🤖 Machine Learning Model
 
-### Training Data
+### Training Data: CIC-IDS2017 Dataset
 
-Het model is getraind op de **CIC-IDS2017 dataset**:
+Het model is getraind op de **Canadian Institute for Cybersecurity IDS 2017** dataset:
 
-- 📁 **2.8 miljoen** netwerkflows
-- 🔴 **Aanvallen**: DDoS, PortScan, Web Attacks, Infiltration
-- 🟢 **Normaal verkeer**: Web browsing, streaming, file transfers
+| Eigenschap | Waarde |
+|------------|--------|
+| **Totale flows** | 2.830.743 |
+| **Aanval samples** | 557.646 (19.7%) |
+| **Benign samples** | 2.273.097 (80.3%) |
+| **Features per flow** | 84 |
+| **Bestandsgrootte** | ~1.2 GB |
 
-### Model Architectuur
+#### Dataset Samenstelling per Dag
 
-We gebruiken een **Ensemble Model** dat twee AI-algoritmes combineert:
+| Dag | Aanval Type | Samples |
+|-----|-------------|---------|
+| Maandag | Benign (baseline traffic) | 529.918 |
+| Dinsdag | FTP-Patator, SSH-Patator | 13.835 |
+| Woensdag | DoS Hulk, DoS GoldenEye, DoS Slowloris | 252.661 |
+| Donderdag | Web Attack (XSS, SQL Injection, Brute Force) | 21.564 |
+| Vrijdag | DDoS, PortScan, Bot | 286.467 |
 
-#### 1. XGBoost Classifier
-- **Type**: Gradient Boosted Decision Trees
-- **Sterkte**: Herkent complexe patronen
-- **Output**: Kans op aanval (0-100%)
+### Data Preprocessing Pipeline
 
-#### 2. Isolation Forest
-- **Type**: Anomaly Detection
-- **Sterkte**: Detecteert onbekende aanvallen
-- **Output**: Anomalie score
-
-#### Ensemble Combinatie
 ```
-Final Score = 0.7 × XGBoost + 0.3 × Isolation Forest
+Raw CSV Data (8 files)
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  1. COLUMN NAME CLEANING            │
+│     • Strip whitespace              │
+│     • Normalize column names        │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  2. MISSING VALUE HANDLING          │
+│     • Replace Inf with NaN          │
+│     • Fill NaN with median values   │
+│     • Remove corrupted rows         │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  3. FEATURE SCALING                 │
+│     • StandardScaler normalization  │
+│     • Mean = 0, Std = 1             │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+      84 Normalized Features Ready
 ```
 
-Als score > 50% → **MALICIOUS**
-Als score ≤ 50% → **BENIGN**
+### Feature Categories (84 Features)
 
-### Feature Engineering
+| Categorie | Aantal | Voorbeelden |
+|-----------|--------|-------------|
+| **Flow Statistics** | 12 | Duration, Total Packets, Total Bytes |
+| **Packet Length** | 16 | Min, Max, Mean, Std (Forward/Backward) |
+| **Inter-Arrival Time** | 16 | Flow IAT, Fwd IAT, Bwd IAT statistics |
+| **Flag Counts** | 9 | SYN, ACK, FIN, RST, PSH, URG flags |
+| **Flow Rates** | 8 | Bytes/s, Packets/s, Down/Up Ratio |
+| **Segment Sizes** | 8 | Average Segment Size, Header Length |
+| **Subflow Stats** | 8 | Subflow packets, bytes (fwd/bwd) |
+| **Active/Idle** | 7 | Active/Idle time Mean, Std, Max, Min |
 
-Het model analyseert **84 kenmerken** per netwerkflow:
+### Model Architectuur: Ensemble Learning
 
-| Categorie | Voorbeelden |
-|-----------|-------------|
-| **Packet Statistics** | Aantal packets, bytes per flow |
-| **Timing** | Flow duration, inter-arrival times |
-| **Protocol Flags** | SYN, ACK, FIN, RST counts |
-| **Payload** | Packet lengths, variance |
-| **Derived Features** | Bytes/second, packets/second ratios |
+We combineren twee complementaire ML algoritmes voor maximale nauwkeurigheid:
+
+#### 1. XGBoost Classifier (Primair Model - 70% gewicht)
+
+| Parameter | Waarde | Uitleg |
+|-----------|--------|--------|
+| **n_estimators** | 100 | Aantal decision trees |
+| **max_depth** | 6 | Maximum tree diepte (voorkomt overfitting) |
+| **learning_rate** | 0.1 | Stap grootte per iteratie |
+| **objective** | binary:logistic | Binaire classificatie |
+
+**Hoe XGBoost werkt:**
+1. Bouwt sequentieel decision trees
+2. Elke nieuwe tree corrigeert fouten van vorige trees
+3. Gradient boosting optimaliseert de loss function
+4. Output: Probability score 0.0 - 1.0
+
+#### 2. Isolation Forest (Anomaly Detector - 30% gewicht)
+
+| Parameter | Waarde | Uitleg |
+|-----------|--------|--------|
+| **n_estimators** | 100 | Aantal isolation trees |
+| **contamination** | 0.1 | Verwachte anomalie ratio (10%) |
+| **max_samples** | auto | Samples per tree |
+
+**Hoe Isolation Forest werkt:**
+1. Isoleert datapunten door random feature splits
+2. Anomalieën (aanvallen) zijn makkelijker te isoleren → minder splits nodig
+3. Normaal verkeer zit diep in de tree → meer splits nodig
+4. Output: Anomaly score -1.0 tot 1.0 (genormaliseerd naar 0-1)
+
+### Ensemble Decision Flow
+
+```
+                    ┌─────────────────┐
+                    │  Network Flow   │
+                    │  (84 features)  │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+     ┌─────────────────┐           ┌─────────────────┐
+     │    XGBoost      │           │ Isolation Forest│
+     │   Classifier    │           │    Detector     │
+     └────────┬────────┘           └────────┬────────┘
+              │                             │
+              │ P(attack)                   │ Anomaly Score
+              │ [0.0 - 1.0]                 │ [0.0 - 1.0]
+              │                             │
+              └──────────────┬──────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Weighted Average│
+                    │                 │
+                    │ 0.7 × XGB +     │
+                    │ 0.3 × IF        │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   Threshold     │
+                    │    (0.50)       │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+        Score ≤ 0.5                   Score > 0.5
+        ┌─────────┐                   ┌─────────┐
+        │ BENIGN  │                   │MALICIOUS│
+        │   ✅    │                   │   🚨    │
+        └─────────┘                   └─────────┘
+```
+
+### Waarom Ensemble?
+
+| Aspect | XGBoost Alleen | Isolation Forest Alleen | Ensemble |
+|--------|----------------|-------------------------|----------|
+| **Bekende aanvallen** | ✅ Excellent | ⚠️ Matig | ✅ Excellent |
+| **Onbekende aanvallen** | ⚠️ Matig | ✅ Excellent | ✅ Excellent |
+| **False Positives** | ⚠️ Soms | ⚠️ Vaker | ✅ Minimaal |
+| **Interpreteerbaar** | ✅ Ja | ❌ Nee | ⚠️ Gedeeltelijk |
+
+### Saved Model Artifacts
+
+| Bestand | Grootte | Inhoud |
+|---------|---------|--------|
+| `xgboost_model.json` | ~4 MB | Trained XGBoost model |
+| `isolation_forest.pkl` | ~12 MB | Trained Isolation Forest |
+| `feature_transformers.pkl` | ~156 KB | Scaler + feature names |
 
 ---
 
@@ -197,38 +316,225 @@ Onze firewall detecteert de volgende wireless attacks:
 
 ---
 
-## 📊 Dashboard
+## 📊 Dashboard & Infrastructure
 
-### Real-time Monitoring
+### Containerized Architecture (Docker)
 
-Het dashboard toont:
+Het systeem draait volledig in **Docker containers** voor portabiliteit en schaalbaarheid:
 
-1. **Statistics Cards**
-   - Total Flows - Aantal geanalyseerde flows
-   - Benign - Normaal verkeer
-   - Malicious - Gedetecteerde aanvallen
-   - Attack Types - Welke aanvallen zijn gezien
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        DOCKER HOST                               │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                 docker-compose.yml                       │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│       ┌──────────────────────┼──────────────────────┐           │
+│       │                      │                      │           │
+│       ▼                      ▼                      ▼           │
+│  ┌─────────┐          ┌─────────────┐        ┌──────────┐       │
+│  │  NGINX  │◄────────►│  AI-ENGINE  │◄──────►│  REDIS   │       │
+│  │Dashboard│   HTTP   │   FastAPI   │  Cache │  Cache   │       │
+│  │ :80     │          │   :8000     │        │  :6379   │       │
+│  └─────────┘          └─────────────┘        └──────────┘       │
+│       │                      │                                   │
+│       │               ┌──────┴──────┐                           │
+│       │               │             │                           │
+│       │               ▼             ▼                           │
+│       │         ┌──────────┐ ┌──────────┐                       │
+│       │         │ XGBoost  │ │Isolation │                       │
+│       │         │  Model   │ │  Forest  │                       │
+│       │         └──────────┘ └──────────┘                       │
+│       │                                                          │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                 firewall-net (172.28.0.0/16)              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-2. **Flow Classification Chart**
-   - Pie chart met verhouding attack/benign
+### Container Specifications
 
-3. **Threat Timeline**
-   - Live grafiek van detecties over tijd
+| Container | Image | Resources | Purpose |
+|-----------|-------|-----------|---------|
+| **ai-firewall-engine** | python:3.12-slim | 4 CPU, 8GB RAM | ML inference + REST API |
+| **ai-firewall-dashboard** | nginx:alpine | 0.5 CPU, 256MB | Static web hosting |
+| **ai-firewall-redis** | redis:7-alpine | 1 CPU, 512MB | Caching + session storage |
 
-4. **Risk Score Distribution**
-   - Histogram van threat scores
+### Network Configuration
 
-5. **Recent Alerts**
-   - Lijst met gedetecteerde aanvallen
-   - Attack type, source IP, destination IP
-   - Threat score per detectie
+| Network | Subnet | Purpose |
+|---------|--------|---------|
+| **firewall-net** | 172.28.0.0/16 | Internal container communication |
+| **Port 80** | External | Dashboard web interface |
+| **Port 8000** | Internal | REST API + WebSocket endpoints |
+| **Port 6379** | Internal | Redis cache (not exposed) |
 
-### Features
+### API Server (FastAPI)
 
-- ⚡ **Real-time updates** via polling
-- 🎨 **Dark theme** design
-- 📱 **Responsive** layout
-- 🔄 **Auto-refresh** elke seconde
+De AI-Engine draait een **FastAPI** web server met deze endpoints:
+
+| Endpoint | Method | Beschrijving |
+|----------|--------|--------------|
+| `/health` | GET | Health check voor Docker |
+| `/predict/raw` | POST | Single flow prediction met 84 features |
+| `/predict/batch` | POST | Batch prediction voor meerdere flows |
+| `/predictions/recent` | GET | Recent predictions voor dashboard |
+| `/ws` | WebSocket | Real-time streaming verbinding |
+
+#### API Request/Response Example
+
+**Request (POST /predict/raw):**
+```json
+{
+  "Destination Port": 80,
+  "Flow Duration": 1000,
+  "Total Fwd Packets": 50000,
+  "Flow Bytes/s": 5000000000,
+  "Fwd Packet Length Max": 1500,
+  "... (84 features)",
+  "attack_type": "DDoS Attack",
+  "src_ip": "192.168.1.100",
+  "dst_ip": "10.0.0.1"
+}
+```
+
+**Response:**
+```json
+{
+  "prediction": "MALICIOUS",
+  "confidence": 0.95,
+  "xgb_score": 0.97,
+  "if_score": 0.89,
+  "ensemble_score": 0.948,
+  "risk_level": "HIGH",
+  "timestamp": "2026-01-12T12:00:00"
+}
+```
+
+### Dashboard Frontend
+
+De web dashboard is gebouwd met moderne web technologieën:
+
+| Component | Technologie | Purpose |
+|-----------|-------------|---------|
+| **HTML5** | Semantic markup | Page structure |
+| **CSS3** | Custom + Flexbox/Grid | Styling + responsive design |
+| **JavaScript** | Vanilla ES6+ | Interactivity + API calls |
+| **Chart.js 4.4** | Canvas rendering | Real-time visualisaties |
+
+### Dashboard Layout
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  🔥 AI-Firewall Dashboard                    ● Real-time       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐   │
+│  │ TOTAL    │  │ BENIGN   │  │MALICIOUS │  │ ATTACK TYPES   │   │
+│  │ FLOWS    │  │          │  │          │  │                │   │
+│  │   156    │  │   132    │  │    24    │  │ DDoS: 8        │   │
+│  │          │  │  84.6%   │  │  15.4%   │  │ PortScan: 6    │   │
+│  └──────────┘  └──────────┘  └──────────┘  │ KRACK: 4       │   │
+│                                             └────────────────┘   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────────────┐  ┌─────────────────────────────┐   │
+│  │   Flow Classification   │  │      Threat Timeline        │   │
+│  │      (Doughnut Chart)   │  │       (Line Chart)          │   │
+│  │                         │  │                             │   │
+│  │    ┌─────────────┐      │  │    ────────────────────     │   │
+│  │    │  ██ 85%     │      │  │    ╱╲    ╱╲                 │   │
+│  │    │  ██ Benign  │      │  │   ╱  ╲  ╱  ╲   Malicious   │   │
+│  │    │  ░░ 15%     │      │  │  ╱    ╲╱    ╲───────────   │   │
+│  │    │  ░░ Attack  │      │  │  ═════════════ Benign      │   │
+│  │    └─────────────┘      │  │                             │   │
+│  └─────────────────────────┘  └─────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  🚨 Recent Alerts                                           ││
+│  │  ──────────────────────────────────────────────────────────  ││
+│  │  12:00:05  WiFi Deauth Attack | Score: 95.7% | 192.168.1.x  ││
+│  │  12:00:04  Evil Twin AP | Score: 90.5% | 10.0.0.x           ││
+│  │  12:00:03  KRACK Attack | Score: 91.0% | 172.16.0.x         ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Real-time Data Flow
+
+```
+┌────────────┐     ┌────────────┐     ┌────────────┐     ┌────────────┐
+│   Attack   │     │    API     │     │   Store    │     │  Dashboard │
+│  Simulator │────►│  /predict  │────►│ predictions│◄────│   Polling  │
+│   Script   │ POST│    /raw    │     │   array    │ GET │  (1 sec)   │
+└────────────┘     └────────────┘     └────────────┘     └────────────┘
+                                             │
+                                             │ /predictions/recent
+                                             │
+                                             ▼
+                                      ┌────────────┐
+                                      │    JSON    │
+                                      │  Response  │
+                                      └────────────┘
+```
+
+### Dashboard Update Cycle
+
+De dashboard update elke seconde via HTTP polling:
+
+```
+init()
+  ├── initCharts()           → Setup Chart.js doughnut + line charts
+  ├── checkApiHealth()       → Verify API connection status
+  ├── loadExistingData()     → Load historical predictions
+  └── startPolling()         → Begin real-time updates (1s interval)
+
+poll() - Every 1 Second
+  ├── GET /predictions/recent?since={lastIndex}
+  ├── For each new prediction:
+  │     └── handlePrediction(data)
+  │           ├── stats.total++
+  │           ├── If MALICIOUS:
+  │           │     ├── stats.malicious++
+  │           │     ├── updateAttackTypes()
+  │           │     └── addAlert() → Show in alerts panel
+  │           ├── Else: stats.benign++
+  │           ├── updateStatsDisplay()  → Update stat cards
+  │           └── updateCharts()        → Refresh visualizations
+  └── lastIndex = response.next_index
+```
+
+### Deployment Commands
+
+```bash
+# Start all containers in background
+docker-compose up -d
+
+# View real-time logs
+docker logs ai-firewall-engine -f
+
+# Restart after code changes
+docker restart ai-firewall-engine
+
+# Full rebuild (after major changes)
+docker-compose down && docker-compose up -d --build
+
+# Check container status
+docker ps
+```
+
+### Dashboard Features
+
+| Feature | Beschrijving |
+|---------|--------------|
+| ⚡ **Real-time updates** | Polling elke seconde naar API |
+| 🎨 **Dark theme** | Moderne donkere interface |
+| 📱 **Responsive** | Werkt op desktop, tablet, mobile |
+| 🔄 **Auto-refresh** | Automatische chart updates |
+| 📊 **Multiple charts** | Doughnut + Line visualisaties |
+| 🚨 **Alert panel** | Scrollable lijst met recente aanvallen |
 
 ---
 
