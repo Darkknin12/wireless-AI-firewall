@@ -1,0 +1,18 @@
+[Unit]
+Description=AI-Firewall Auto-Start
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=pi
+WorkingDirectory=/home/pi/ai-firewall
+ExecStart=/home/pi/ai-firewall/start.sh
+ExecStop=/usr/bin/docker-compose -f /home/pi/ai-firewall/docker-compose-rpi.yml down
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Firewall - Blocked IPs Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ AI-Firewall Dashboard</h1>
+            <p>Real-time Network Threat Protection</p>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab active" onclick="showTab('overview')">Overview</button>
+            <button class="tab" onclick="showTab('blocked')">Blocked IPs</button>
+            <button class="tab" onclick="showTab('logs')">Logs</button>
+            <button class="tab" onclick="showTab('settings')">Settings</button>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">🔍</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Total Flows</div>
+                        <div class="stat-value" id="totalFlows">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card benign">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Benign</div>
+                        <div class="stat-value" id="benignFlows">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card malicious">
+                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Threats</div>
+                        <div class="stat-value" id="maliciousFlows">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card blocked">
+                    <div class="stat-icon">🚫</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Blocked IPs</div>
+                        <div class="stat-value" id="blockedCount">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3>Flow Classification</h3>
+                    <canvas id="classificationChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Threat Timeline</h3>
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blocked IPs Tab -->
+        <div id="blocked-tab" class="tab-content">
+            <div class="blocked-header">
+                <h2>🚫 Currently Blocked IP Addresses</h2>
+                <button class="refresh-btn" onclick="refreshBlockedIPs()">🔄 Refresh</button>
+            </div>
+
+            <div class="blocked-stats">
+                <div class="blocked-stat">
+                    <span class="label">Total Blocked:</span>
+                    <span class="value" id="totalBlocked">0</span>
+                </div>
+                <div class="blocked-stat">
+                    <span class="label">Auto-Block:</span>
+                    <span class="value" id="autoBlockStatus">Disabled</span>
+                </div>
+                <div class="blocked-stat">
+                    <span class="label">Threshold:</span>
+                    <span class="value" id="blockThreshold">0.7</span>
+                </div>
+            </div>
+
+            <!-- Blocked IPs Table -->
+            <div class="table-container">
+                <table class="blocked-table" id="blockedTable">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Blocked At</th>
+                            <th>Reason</th>
+                            <th>Method</th>
+                            <th>Expires In</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="blockedTableBody">
+                        <tr>
+                            <td colspan="6" class="no-data">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="logs-header">
+                <h2>📋 Blocking History</h2>
+                <button class="refresh-btn" onclick="refreshLogs()">🔄 Refresh</button>
+            </div>
+
+            <div class="logs-container" id="logsContainer">
+                <div class="log-entry">Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="settings-container">
+                <h2>⚙️ Firewall Settings</h2>
+
+                <div class="setting-group">
+                    <label for="autoBlockToggle">
+                        <span>Automatic Blocking</span>
+                        <input type="checkbox" id="autoBlockToggle" onchange="toggleAutoBlock()">
+                    </label>
+                    <p class="setting-description">Automatically block malicious IPs when detected</p>
+                </div>
+
+                <div class="setting-group">
+                    <label for="thresholdSlider">
+                        <span>Blocking Threshold: <strong id="thresholdValue">0.7</strong></span>
+                        <input type="range" id="thresholdSlider" min="0.5" max="0.95" step="0.05" value="0.7" oninput="updateThreshold(this.value)">
+                    </label>
+                    <p class="setting-description">Minimum threat score to trigger blocking (0.5 = sensitive, 0.9 = conservative)</p>
+                </div>
+
+                <div class="setting-group">
+                    <label for="blockDuration">
+                        <span>Block Duration (hours)</span>
+                        <input type="number" id="blockDuration" min="1" max="168" value="24" onchange="updateBlockDuration(this.value)">
+                    </label>
+                    <p class="setting-description">How long to keep IPs blocked before auto-unblock</p>
+                </div>
+
+                <div class="setting-group">
+                    <h3>Whitelist</h3>
+                    <textarea id="whitelistIPs" rows="5" placeholder="192.168.1.1&#10;8.8.8.8&#10;1.1.1.1"></textarea>
+                    <button class="save-btn" onclick="saveWhitelist()">💾 Save Whitelist</button>
+                    <p class="setting-description">IPs that will never be blocked (one per line)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Alerts -->
+        <div class="alerts-container" id="alertsContainer"></div>
+    </div>
+
+    <script src="dashboard-blocking.js"></script>
+</body>
+</html>

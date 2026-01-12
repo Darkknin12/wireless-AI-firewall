@@ -1,0 +1,126 @@
+# AI-Firewall voor Raspberry Pi 4 (8GB) - Optimized Stack
+# Geoptimaliseerd voor ARM64 met Suricata IDS integration
+
+services:
+  # Suricata IDS/IPS - Primary threat detection
+  suricata:
+    image: jasonish/suricata:latest # ARM64 compatible
+    container_name: ai-firewall-suricata
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./suricata:/etc/suricata:ro
+      - ./logs/suricata:/var/log/suricata
+      - ./rules:/var/lib/suricata/rules
+    environment:
+      - SURICATA_OPTIONS=-i br0 --init-errors-fatal
+    command: >
+      /bin/sh -c "suricata-update && 
+                  suricata -c /etc/suricata/suricata.yaml -i br0 -vvv"
+    healthcheck:
+      test: ["CMD", "suricatasc", "-c", "uptime"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # AI-Firewall Engine - ML-based blocking (lightweight)
+  ai-firewall-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi
+    container_name: ai-firewall-engine
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    volumes:
+      - ./models:/app/models:ro
+      - ./config.json:/app/config.json:ro
+      - ./logs:/app/logs
+      - ./logs/suricata:/app/suricata_logs:ro # Read Suricata alerts
+    environment:
+      - FIREWALL_AUTO_BLOCK=true
+      - FIREWALL_THRESHOLD=0.7
+      - LOG_LEVEL=INFO
+      - SURICATA_EVE_LOG=/app/suricata_logs/eve.json
+      - ML_BATCH_SIZE=100 # Process in batches for efficiency
+    # Combine Suricata alerts + ML predictions
+    command: python suricata_ml_blocker.py
+    depends_on:
+      - suricata
+      - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # Lightweight API (single worker)
+  ai-firewall-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi
+    container_name: ai-firewall-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+      - ./config.json:/app/config.json:ro
+      - ./logs:/app/logs
+    environment:
+      - WORKERS=2 # Only 2 workers for RPi
+      - LOG_LEVEL=WARNING # Less verbose
+      - REDIS_URL=redis://redis:6379
+    command: uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 2
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # Lightweight Dashboard (nginx alpine)
+  ai-firewall-dashboard:
+    image: nginx:alpine # Smallest nginx image
+    container_name: ai-firewall-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./nginx-rpi.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ai-firewall-api
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # Redis - Caching only (no persistence to save SD card writes)
+  redis:
+    image: redis:7-alpine
+    container_name: ai-firewall-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+
+# No named volumes needed - all data is ephemeral or host-mounted
+# No PostgreSQL database - using Redis only
+# No Grafana - using lightweight dashboard
+
+networks:
+  default:
+    driver: bridge

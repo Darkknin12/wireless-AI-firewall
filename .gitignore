@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model files (te groot voor git)
+models/*.pkl
+models/*.joblib
+models/*.model
+models/*.h5
+
+# Data files (te groot voor git)
+ml_data/**/*.csv
+ml_data/**/*.parquet
+ml_data/**/*.pcap
+*.csv
+*.parquet
+
+# Output files
+output/*.png
+output/*.jpg
+output/*.pdf
+logs/*.json
+logs/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+
+# Exclude config from git (contains sensitive info)
+# config.yaml  # Uncomment if config bevat credentials

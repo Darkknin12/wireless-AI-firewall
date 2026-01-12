@@ -1,0 +1,37 @@
+# Dockerfile voor Raspberry Pi 4 (ARM64)
+# Optimized for low resource usage
+
+FROM python:3.11-slim-bullseye
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    iptables \
+    iproute2 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python packages (optimized for ARM)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY *.py ./
+COPY utils.py ./
+COPY feature_extraction.py ./
+COPY inference.py ./
+COPY firewall_blocker.py ./
+COPY suricata_ml_blocker.py ./
+
+# Copy models and config
+COPY models/ ./models/
+COPY config.json ./
+
+# Run as root (needed for iptables)
+USER root
+
+CMD ["python", "suricata_ml_blocker.py"]

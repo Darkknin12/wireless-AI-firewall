@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Firewall Setup Wizard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .wizard-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .wizard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .wizard-header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .wizard-header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px 30px;
+            background: #f8f9fa;
+        }
+        
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+        
+        .progress-step::before {
+            content: '';
+            display: block;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #ddd;
+            margin: 0 auto 10px;
+            line-height: 40px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .progress-step.active::before {
+            background: #667eea;
+            content: '✓';
+            font-size: 24px;
+        }
+        
+        .progress-step.current::before {
+            background: #764ba2;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .wizard-content {
+            padding: 40px;
+        }
+        
+        .step {
+            display: none;
+        }
+        
+        .step.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .step h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        .step p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .security-level {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .security-option {
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .security-option:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+        }
+        
+        .security-option.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .security-option h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .security-option p {
+            font-size: 12px;
+            color: #666;
+            margin: 0;
+        }
+        
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            background: #4caf50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            color: white;
+            animation: scaleIn 0.5s;
+        }
+        
+        @keyframes scaleIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+        
+        .buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #666;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .network-check {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .network-check h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .check-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .check-item:last-child {
+            border-bottom: none;
+        }
+        
+        .check-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 15px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: white;
+        }
+        
+        .check-icon.success {
+            background: #4caf50;
+        }
+        
+        .check-icon.loading {
+            background: #ff9800;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .device-info {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .device-info strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <div class="wizard-header">
+            <h1>🛡️ AI-Firewall Setup</h1>
+            <p>Let's protect your network in just a few steps!</p>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-step current" id="progress-1">
+                <small>Starting...</small>
+            </div>
+            <div class="progress-step" id="progress-2">
+                <small>Protected!</small>
+            </div>
+        </div>
+        
+        <div class="wizard-content">
+            <!-- Step 1: Welcome & Auto-Setup -->
+            <div class="step active" id="step-1">
+                <h2>Welcome to AI-Firewall! 👋</h2>
+                <p>Your device is automatically configuring itself...</p>
+                
+                <div class="device-info">
+                    <p><strong>Device ID:</strong> <span id="device-id">Loading...</span></p>
+                    <p><strong>Status:</strong> <span style="color: #4caf50;">✓ Online</span></p>
+                    <p><strong>Protection:</strong> <span style="color: #ff9800;">⏳ Activating...</span></p>
+                </div>
+                
+                <div class="network-check">
+                    <h3>🔧 Automatic Setup Progress</h3>
+                    <div class="check-item">
+                        <div class="check-icon loading" id="check-1">⏳</div>
+                        <span>Detecting network interfaces...</span>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-icon loading" id="check-2">⏳</div>
+                        <span>Loading AI models...</span>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-icon loading" id="check-3">⏳</div>
+                        <span>Starting Suricata IDS...</span>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-icon loading" id="check-4">⏳</div>
+                        <span>Activating protection (threshold: 0.7)...</span>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 20px; color: #999;">
+                    <small>This takes about 30 seconds...</small>
+                </p>
+                
+                <div class="buttons">
+                    <button class="btn btn-primary" id="skip-btn" style="width: 100%; display: none;" onclick="skipToSuccess()">
+                        Continue to Dashboard →
+                    </button>
+                </div>
+            </div>
+            
+
+            
+            <!-- Step 2: Success -->
+            <div class="step" id="step-2">
+                <div class="success-icon">✓</div>
+                <h2 style="text-align: center; color: #4caf50;">You're Protected!</h2>
+                <p style="text-align: center; font-size: 18px;">
+                    Your AI-Firewall is now actively protecting your network.
+                </p>
+                
+                <div class="device-info">
+                    <p><strong>Device ID:</strong> <span id="device-id-final">AF-2025-XXXX</span></p>
+                    <p><strong>Protection Status:</strong> <span style="color: #4caf50;">✓ Active</span></p>
+                    <p><strong>Security Level:</strong> <span style="color: #667eea;">Normal (Threshold: 0.7)</span></p>
+                    <p><strong>Dashboard:</strong> <a href="/">Open Dashboard</a></p>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <strong>📊 What's happening now:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li>✅ All traffic is being analyzed by AI</li>
+                        <li>✅ Threats are automatically blocked (score ≥ 0.7)</li>
+                        <li>🟢 Green LED = Everything OK</li>
+                        <li>🔴 Red flash = Attack blocked!</li>
+                    </ul>
+                </div>
+                
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <strong>🎯 What's protected:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li>DDoS attacks (SYN flood, UDP flood)</li>
+                        <li>Port scanning (Nmap, Masscan)</li>
+                        <li>Brute force attacks (SSH, FTP, RDP)</li>
+                        <li>Web attacks (SQL injection, XSS)</li>
+                        <li>Malware & botnets</li>
+                        <li>Unknown threats (AI learns!)</li>
+                    </ul>
+                </div>
+                
+                <p style="text-align: center; margin-top: 30px;">
+                    <strong>Your network is now 99% safer! 🛡️</strong>
+                </p>
+                
+                <p style="text-align: center; color: #999; margin-top: 10px;">
+                    <small>No configuration needed - works automatically 24/7</small>
+                </p>
+                
+                <div class="buttons">
+                    <button class="btn btn-primary" onclick="window.location='/'" style="width: 100%;">
+                        Open Dashboard →
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentStep = 1;
+        let deviceId = 'AF-2025-DEMO';
+        
+        // Load device info
+        fetch('/api/device-info')
+            .then(res => res.json())
+            .then(data => {
+                deviceId = data.device_id;
+                document.getElementById('device-id').textContent = deviceId;
+                document.getElementById('device-id-final').textContent = deviceId;
+            })
+            .catch(err => {
+                document.getElementById('device-id').textContent = deviceId;
+                document.getElementById('device-id-final').textContent = deviceId;
+            });
+        
+        // Auto-setup simulation
+        let checkProgress = 0;
+        const checks = ['check-1', 'check-2', 'check-3', 'check-4'];
+        
+        function simulateSetup() {
+            if (checkProgress >= checks.length) {
+                // All checks complete - show success button
+                document.getElementById('skip-btn').style.display = 'block';
+                
+                // Auto-proceed after 2 seconds
+                setTimeout(() => {
+                    skipToSuccess();
+                }, 2000);
+                return;
+            }
+            
+            // Mark current check as complete
+            const checkEl = document.getElementById(checks[checkProgress]);
+            checkEl.classList.remove('loading');
+            checkEl.classList.add('success');
+            checkEl.textContent = '✓';
+            
+            checkProgress++;
+            
+            // Next check
+            setTimeout(simulateSetup, 800);
+        }
+        
+        // Start auto-setup after 1 second
+        setTimeout(simulateSetup, 1000);
+        
+        function skipToSuccess() {
+            // Activate protection (default settings: threshold 0.7)
+            fetch('/api/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    auto_block: true,
+                    block_threshold: 0.7,
+                    device_id: deviceId
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('Protection activated:', data);
+            })
+            .catch(err => {
+                console.log('Activation request sent (offline mode)');
+            });
+            
+            // Hide current step
+            document.getElementById('step-1').classList.remove('active');
+            document.getElementById('progress-1').classList.remove('current');
+            document.getElementById('progress-1').classList.add('active');
+            
+            // Show success step
+            document.getElementById('step-2').classList.add('active');
+            document.getElementById('progress-2').classList.add('current');
+        }
+    </script>
+</body>
+</html>

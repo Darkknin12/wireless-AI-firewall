@@ -1,0 +1,150 @@
+# AI-Firewall Docker Deployment - Complete Stack
+# Includes automatic blocking, API, dashboard, and monitoring
+
+version: "3.8"
+
+services:
+  # Main AI-Firewall Engine with Auto-Blocking
+  ai-firewall-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.firewall
+    container_name: ai-firewall-engine
+    restart: unless-stopped
+    network_mode: host # Required for packet capture and firewall rules
+    cap_add:
+      - NET_ADMIN # Required for iptables
+      - NET_RAW # Required for packet capture
+    privileged: true # Required for firewall manipulation
+    volumes:
+      - ./models:/app/models:ro
+      - ./config.json:/app/config.json:ro
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - FIREWALL_AUTO_BLOCK=true
+      - FIREWALL_THRESHOLD=0.7
+      - LOG_LEVEL=INFO
+    command: python realtime_firewall.py -i eth0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from firewall_blocker import FirewallBlocker; print('OK')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Server for Monitoring and Control
+  ai-firewall-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-firewall-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - ./models:/app/models:ro
+      - ./config.json:/app/config.json:ro
+      - ./logs:/app/logs
+    environment:
+      - WORKERS=4
+      - LOG_LEVEL=INFO
+    command: uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - redis
+      - postgres
+
+  # Enhanced Dashboard with Blocking Overview
+  ai-firewall-dashboard:
+    image: nginx:alpine
+    container_name: ai-firewall-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./nginx-blocking.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ai-firewall-api
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7-alpine
+    container_name: ai-firewall-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # PostgreSQL for logging and blocked IPs
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-firewall-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=ai_firewall
+      - POSTGRES_USER=firewall
+      - POSTGRES_PASSWORD=secure_password_here
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firewall"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Grafana for Advanced Monitoring (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-firewall-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - redis
+      - postgres
+
+volumes:
+  redis-data:
+  postgres-data:
+  grafana-data:
+
+networks:
+  default:
+    name: ai-firewall-network
+    driver: bridge

@@ -1,0 +1,50 @@
+{
+    "model": {
+        "xgboost_weight": 0.7,
+        "isolation_forest_weight": 0.3,
+        "threshold": 0.5
+    },
+    "training": {
+        "test_size": 0.3,
+        "random_state": 42,
+        "n_estimators": 100,
+        "max_depth": 7,
+        "learning_rate": 0.1
+    },
+    "firewall": {
+        "auto_block": true,
+        "block_threshold": 0.7,
+        "block_duration": 24,
+        "ml_validation": true,
+        "whitelist": [
+            "127.0.0.1",
+            "192.168.1.1",
+            "192.168.100.1",
+            "8.8.8.8",
+            "8.8.4.4",
+            "1.1.1.1"
+        ],
+        "max_blocked_ips": 10000
+    },
+    "network": {
+        "wan_interface": "eth0",
+        "lan_interface": "eth1"
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "logs/ai-firewall.log",
+        "max_size_mb": 100,
+        "backup_count": 5
+    },
+    "performance": {
+        "batch_size": 100,
+        "num_workers": 2,
+        "enable_cache": true
+    },
+    "raspberry_pi": {
+        "optimize_for_arm": true,
+        "max_memory_mb": 6000,
+        "cpu_cores": 4,
+        "enable_swap": true
+    }
+}
